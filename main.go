@@ -13,12 +13,13 @@ import (
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 var db *sql.DB
-var anthropicClient *anthropic.Client
+var anthropicClient anthropic.Client
 
 // Models
 type SignupRequest struct {
@@ -138,7 +139,7 @@ func init() {
 	}
 
 	anthropicClient = anthropic.NewClient(
-		anthropic.WithAPIKey(apiKey),
+		option.WithAPIKey(apiKey),
 	)
 }
 
@@ -239,16 +240,15 @@ Create a mentor persona that perfectly matches them.`, user.Name, user.CareerSta
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	message, err := anthropicClient.Messages.New(ctx, &anthropic.MessageParam{
-		Model:     anthropic.ModelClaude3_5Sonnet20241022,
+	message, err := anthropicClient.Messages.New(ctx, anthropic.MessageNewParams{
+		Model:     anthropic.Model("claude-3-5-sonnet-20241022"),
 		MaxTokens: 1024,
 		Messages: []anthropic.MessageParam{
-			{
-				Role: anthropic.RoleUser,
-				Content: anthropic.NewTextBlock(prompt),
-			},
+			anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),
 		},
-		System: anthropic.NewTextBlock("You are a mentor matching system. Return only valid JSON."),
+		System: []anthropic.TextBlockParam{
+			{Text: "You are a mentor matching system. Return only valid JSON."},
+		},
 	})
 
 	if err != nil {
@@ -260,8 +260,8 @@ Create a mentor persona that perfectly matches them.`, user.Name, user.CareerSta
 	// Extract text from response
 	var responseText string
 	for _, block := range message.Content {
-		if textBlock, ok := block.(*anthropic.TextBlock); ok {
-			responseText = textBlock.Text
+		if block.Type == "text" {
+			responseText = block.Text
 			break
 		}
 	}
@@ -350,16 +350,11 @@ func handleChat(w http.ResponseWriter, r *http.Request) {
 	// Prepare messages for Claude API
 	var claudeMessages []anthropic.MessageParam
 	for _, msg := range messages {
-		var role anthropic.MessageParamRole
 		if msg.Role == "user" {
-			role = anthropic.RoleUser
+			claudeMessages = append(claudeMessages, anthropic.NewUserMessage(anthropic.NewTextBlock(msg.Content)))
 		} else {
-			role = anthropic.RoleAssistant
+			claudeMessages = append(claudeMessages, anthropic.NewAssistantMessage(anthropic.NewTextBlock(msg.Content)))
 		}
-		claudeMessages = append(claudeMessages, anthropic.MessageParam{
-			Role:    role,
-			Content: anthropic.NewTextBlock(msg.Content),
-		})
 	}
 
 	// Get AI response
@@ -379,11 +374,13 @@ Focus on helping them take the next concrete step toward their goal.`, mentor.Na
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	response, err := anthropicClient.Messages.New(ctx, &anthropic.MessageParam{
-		Model:     anthropic.ModelClaude3_5Sonnet20241022,
+	response, err := anthropicClient.Messages.New(ctx, anthropic.MessageNewParams{
+		Model:     anthropic.Model("claude-3-5-sonnet-20241022"),
 		MaxTokens: 1024,
 		Messages:  claudeMessages,
-		System:    anthropic.NewTextBlock(systemPrompt),
+		System: []anthropic.TextBlockParam{
+			{Text: systemPrompt},
+		},
 	})
 
 	if err != nil {
@@ -395,8 +392,8 @@ Focus on helping them take the next concrete step toward their goal.`, mentor.Na
 	// Extract response text
 	var assistantMessage string
 	for _, block := range response.Content {
-		if textBlock, ok := block.(*anthropic.TextBlock); ok {
-			assistantMessage = textBlock.Text
+		if block.Type == "text" {
+			assistantMessage = block.Text
 			break
 		}
 	}
@@ -481,16 +478,15 @@ Conversation:
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	response, err := anthropicClient.Messages.New(ctx, &anthropic.MessageParam{
-		Model:     anthropic.ModelClaude3_5Sonnet20241022,
+	response, err := anthropicClient.Messages.New(ctx, anthropic.MessageNewParams{
+		Model:     anthropic.Model("claude-3-5-sonnet-20241022"),
 		MaxTokens: 512,
 		Messages: []anthropic.MessageParam{
-			{
-				Role:    anthropic.RoleUser,
-				Content: anthropic.NewTextBlock(summaryPrompt),
-			},
+			anthropic.NewUserMessage(anthropic.NewTextBlock(summaryPrompt)),
 		},
-		System: anthropic.NewTextBlock("You are a learning coach. Return only valid JSON."),
+		System: []anthropic.TextBlockParam{
+			{Text: "You are a learning coach. Return only valid JSON."},
+		},
 	})
 
 	if err != nil {
@@ -502,8 +498,8 @@ Conversation:
 	// Extract response text
 	var responseText string
 	for _, block := range response.Content {
-		if textBlock, ok := block.(*anthropic.TextBlock); ok {
-			responseText = textBlock.Text
+		if block.Type == "text" {
+			responseText = block.Text
 			break
 		}
 	}
