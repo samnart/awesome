@@ -1,0 +1,16 @@
+# Binaries
+mentor-app
+
+# Database
+*.db
+
+# Go build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Dependency directories
+vendor/
